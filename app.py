@@ -35,8 +35,8 @@ elif page == "Login / Sign Up":
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
     with tab1:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pw")
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Password", type="password", key="login_pw")
             if st.button("Login"):
                 if not email or not password:
                     st.warning("Please enter email and password.")
