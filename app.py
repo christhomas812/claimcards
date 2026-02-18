@@ -40,32 +40,30 @@ elif page == "Login / Sign Up":
     st.header("Login / Sign Up")
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
-  with tab1:
-    email = st.text_input("Email", key="login_email")
-    password = st.text_input("Password", type="password", key="login_pw")
-    
-    if st.button("Login"):
-        if not email or not password:
-            st.warning("Please enter both email and password.")
-        else:
-            with st.spinner("Logging in..."):
-                try:
-                    response = conn.auth.sign_in_with_password({"email": email, "password": password})
-                    
-                    if response.user:
-                        st.session_state.user = response.user
-                        st.success("Logged in successfully!")
+    with tab1:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_pw")
+        
+        if st.button("Login"):
+            if not email or not password:
+                st.warning("Please enter both email and password.")
+            else:
+                with st.spinner("Logging in..."):
+                    try:
+                        response = conn.auth.sign_in_with_password({"email": email, "password": password})
                         
-                        # Force page refresh after a tiny delay (fixes rerun timing issue)
-                        import time
-                        time.sleep(0.5)
-                        st.rerun()
-                    else:
-                        st.error("Login failed – check your email and password.")
-                
-                except Exception as e:
-                    st.error(f"Login error: {str(e)}")
-                    st.info("Tip: Make sure your account is confirmed (check email/spam).")
+                        if response.user:
+                            st.session_state.user = response.user
+                            st.success("Logged in successfully!")
+                            import time
+                            time.sleep(0.5)
+                            st.rerun()
+                        else:
+                            st.error("Login failed – check your email and password.")
+                    
+                    except Exception as e:
+                        st.error(f"Login error: {str(e)}")
+                        st.info("Tip: Make sure your account is confirmed (check email/spam).")
 
     with tab2:
         email = st.text_input("Email", key="signup_email")
@@ -76,7 +74,6 @@ elif page == "Login / Sign Up":
                 st.success("Account created! Check your email to confirm (including spam folder).")
             except Exception as e:
                 st.error(f"Sign-up error: {str(e)}")
-
 # ────────────────────────────────────────────────
 # Create a Sale
 # ────────────────────────────────────────────────
