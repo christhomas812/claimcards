@@ -51,10 +51,10 @@ elif page == "Login / Sign Up":
                                 import time
                                 time.sleep(1)  # 1 second delay
                                 st.rerun()
-                        else:
-                            st.error("Login failed – check credentials.")
-                    except Exception as e:
-                        st.error(f"Login error: {str(e)}")
+                            else:
+                                 st.error("Login failed – check credentials.")
+                        except Exception as e:
+                            st.error(f"Login error: {str(e)}")
 
     with tab2:
         email = st.text_input("Email", key="signup_email")
