@@ -81,13 +81,15 @@ elif page == "Create a Sale":
         image = st.file_uploader(f"Upload your {grid_size}-card grid image", type=["jpg", "png", "jpeg"])
 
         if st.button("Post Sale") and image and title:
-            with st.spinner("Uploading image and creating sale..."):
+            with st.spinner("Uploading and posting sale..."):
                 try:
-                    # Convert memoryview to bytes
-                    image_bytes = image.getbuffer().tobytes()
+                    # Convert uploaded file to bytes
+                    image_bytes = image.getvalue()
 
                     user_id = st.session_state.user.id
                     image_path = f"grids/{user_id}/{image.name}"
+                    
+                    # Upload to Supabase storage
                     conn.client.storage.from_("claimcards").upload(
                         image_path,
                         image_bytes,
@@ -95,8 +97,9 @@ elif page == "Create a Sale":
                     )
                     image_url = conn.client.storage.from_("claimcards").get_public_url(image_path)
 
+                    # Create the post record
                     expiration = (datetime.now() + timedelta(hours=hours)).isoformat()
-                    post = conn.table("posts").insert({
+                    post_response = conn.table("posts").insert({
                         "user_id": user_id,
                         "title": title,
                         "image_url": image_url,
@@ -106,8 +109,9 @@ elif page == "Create a Sale":
                         "price_per_card": price_per_card
                     }).execute()
 
-                    post_id = post.data[0]["id"]
+                    post_id = post_response.data[0]["id"]
 
+                    # Create segments
                     for i in range(1, grid_size + 1):
                         conn.table("segments").insert({
                             "post_id": post_id,
@@ -116,11 +120,10 @@ elif page == "Create a Sale":
                         }).execute()
 
                     st.success("Sale posted successfully!")
-                    st.image(image_url, caption="Your grid")
+                    st.image(image_url, caption="Your uploaded grid")
 
                 except Exception as e:
                     st.error(f"Error creating sale: {str(e)}")
-
 # Browse Sales
 elif page == "Browse Sales":
     st.header("Browse Sales")
