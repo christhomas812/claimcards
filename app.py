@@ -156,25 +156,34 @@ elif page == "Create a Sale":
                 try:
                     # Upload image
                     user_id = st.session_state.user.id
-                    image_path = f"gr
-            grid_size = post["grid_size"]
-            cols_per_row = min(3, grid_size)
-            rows = (grid_size + cols_per_row - 1) // cols_per_row
+                    image_path = f"grids/{user_id}/{image.name}"
+                    conn.client.storage.from_("claimcards").upload(image_path, image.getbuffer(), {"content-type": image.type})
+                    image_url = conn.client.storage.from_("claimcards").get_public_url(image_path)
 
-            for r in range(rows):
-                cols = st.columns(cols_per_row)
-                for c in range(cols_per_row):
-                    seg_num = r * cols_per_row + c + 1
-                    if seg_num > grid_size:
-                        break
-                    with cols[c]:
-                        seg = conn.table("segments").select("*").eq("post_id", post["id"]).eq("segment_number", seg_num).single().execute().data
-                        if seg["claimed"]:
-                            st.button(f"#{seg_num} Claimed", disabled=True)
-                        else:
-                            if st.button(f"Claim #{seg_num} - ${post['price_per_card']}"):
-                                st.info("Claim logic coming soon")
-                            if st.button(f"Offer on #{seg_num}"):
-                                st.info("Offer logic coming soon")
-    except Exception as e:
-        st.error(f"Error loading sales: {str(e)}")
+                    # Create post
+                    expiration = (datetime.now() + timedelta(hours=hours)).isoformat()
+                    post = conn.table("posts").insert({
+                        "user_id": user_id,
+                        "title": title,
+                        "image_url": image_url,
+                        "claim_window_hours": hours,
+                        "expiration": expiration,
+                        "grid_size": grid_size,
+                        "price_per_card": price_per_card
+                    }).execute()
+
+                    post_id = post.data[0]["id"]
+
+                    # Create segments
+                    for i in range(1, grid_size + 1):
+                        conn.table("segments").insert({
+                            "post_id": post_id,
+                            "segment_number": i,
+                            "claimed": False
+                        }).execute()
+
+                    st.success("Sale posted successfully!")
+                    st.image(image_url, caption="Your grid")
+
+                except Exception as e:
+                    st.error(f"Error creating sale: {str(e)}")
