@@ -5,57 +5,150 @@ import stripe
 import requests
 from PIL import Image
 
-# Debug Header
-st.title("ClaimCards - Debug Mode")
-st.markdown("Debug version to find why the page was blank.")
-
-# Environment info
-st.subheader("Environment")
-st.write(f"Streamlit version: {st.__version__}")
-
-# Secrets check
-st.subheader("Secrets Status")
-supabase_url   = os.getenv("SUPABASE_URL")
-supabase_key   = os.getenv("SUPABASE_KEY")
-stripe_key     = os.getenv("STRIPE_SECRET_KEY")
-
-st.write("SUPABASE_URL present:", "Yes" if supabase_url else "**No**")
-st.write("SUPABASE_KEY present:", "Yes" if supabase_key else "**No**")
-st.write("STRIPE_SECRET_KEY present:", "Yes" if stripe_key else "**No**")
-
-if not supabase_url or not supabase_key:
-    st.error(
-        "Supabase secrets are missing!\n\n"
-        "How to fix:\n"
-        "1. On this page → bottom-right corner → click 'Manage app'\n"
-        "2. In the dashboard → click 'Settings'\n"
-        "3. Look for 'Secrets' section\n"
-        "4. Paste this (replace with your real values):\n\n"
-        'SUPABASE_URL = "https://your-project-ref.supabase.co"\n'
-        'SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.your-anon-public-key-here"\n'
-        'STRIPE_SECRET_KEY = "sk_test_your-test-key-here"\n\n'
-        "5. Click Save → then Reboot the app → refresh this page"
-    )
+# ────────────────────────────────────────────────
+# Safety check (keep this forever - it's small)
+# ────────────────────────────────────────────────
+if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
+    st.error("Supabase secrets missing - check Settings → Secrets in Manage app")
     st.stop()
 
-st.success("Secrets look good — trying to connect to Supabase...")
+# Connect to Supabase
+from st_supabase_connection import SupabaseConnection
+conn = st.connection("supabase", type=SupabaseConnection)
 
-# Connection test
-try:
-    from st_supabase_connection import SupabaseConnection
-    conn = st.connection(
-        "supabase",
-        type=SupabaseConnection,
-        url=supabase_url,
-        key=supabase_key
-    )
-    st.success("Supabase connected successfully!")
-except Exception as e:
-    st.error(f"Connection failed: {str(e)}")
-    st.info("Common fixes: wrong anon key, bad URL, or Supabase project not set up.")
-    st.stop()
+st.set_page_config(page_title="ClaimCards", layout="wide")
 
-# If we get here, core setup works — show basic app
-st.divider()
-st.success("Core setup passed! You can now add login/sales features.")
-st.write("Next step: add secrets if missing, then reboot the app.")
+# Sidebar navigation
+page = st.sidebar.selectbox("Go to", ["Home", "Login / Sign Up", "Create a Sale", "Browse Sales"])
+
+# ────────────────────────────────────────────────
+# Home
+# ────────────────────────────────────────────────
+if page == "Home":
+    st.title("Welcome to ClaimCards")
+    st.markdown("""
+    Buy and sell trading cards using interactive claim grids!
+    
+    - Log in to create or claim cards
+    - Browse open sales below
+    """)
+
+# ────────────────────────────────────────────────
+# Login / Sign Up
+# ────────────────────────────────────────────────
+elif page == "Login / Sign Up":
+    st.header("Login / Sign Up")
+    tab1, tab2 = st.tabs(["Login", "Sign Up"])
+
+    with tab1:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_pw")
+        if st.button("Login"):
+            try:
+                response = conn.auth.sign_in_with_password({"email": email, "password": password})
+                if response.user:
+                    st.session_state.user = response.user
+                    st.success("Logged in successfully!")
+                    st.rerun()
+                else:
+                    st.error("Login failed – check email/password")
+            except Exception as e:
+                st.error(f"Login error: {str(e)}")
+
+    with tab2:
+        email = st.text_input("Email", key="signup_email")
+        password = st.text_input("Password", type="password", key="signup_pw")
+        if st.button("Create Account"):
+            try:
+                conn.auth.sign_up({"email": email, "password": password})
+                st.success("Account created! Check your email to confirm (including spam folder).")
+            except Exception as e:
+                st.error(f"Sign-up error: {str(e)}")
+
+# ────────────────────────────────────────────────
+# Create a Sale
+# ────────────────────────────────────────────────
+elif page == "Create a Sale":
+    if "user" not in st.session_state:
+        st.warning("Please log in first")
+    else:
+        st.header("Create a New Claim Sale")
+
+        title = st.text_input("Title (e.g. 2024 Topps Chrome Set)")
+        grid_size = st.selectbox("Number of cards", [1, 2, 3, 4, 6, 9])
+        hours = st.selectbox("Claim window (hours)", [24, 48, 72])
+        price_per_card = st.number_input("Price per card ($)", min_value=0.01, step=0.01)
+
+        image = st.file_uploader(f"Upload your {grid_size}-card grid image", type=["jpg", "png", "jpeg"])
+
+        if st.button("Post Sale") and image and title:
+            with st.spinner("Uploading image and creating sale..."):
+                try:
+                    # Upload image
+                    user_id = st.session_state.user.id
+                    image_path = f"grids/{user_id}/{image.name}"
+                    conn.storage.from_("claimcards").upload(image_path, image.getbuffer(), {"content-type": image.type})
+                    image_url = conn.storage.from_("claimcards").get_public_url(image_path)
+
+                    # Create post
+                    expiration = (datetime.now() + timedelta(hours=hours)).isoformat()
+                    post = conn.table("posts").insert({
+                        "user_id": user_id,
+                        "title": title,
+                        "image_url": image_url,
+                        "claim_window_hours": hours,
+                        "expiration": expiration,
+                        "grid_size": grid_size,
+                        "price_per_card": price_per_card
+                    }).execute()
+
+                    post_id = post.data[0]["id"]
+
+                    # Create segments
+                    for i in range(1, grid_size + 1):
+                        conn.table("segments").insert({
+                            "post_id": post_id,
+                            "segment_number": i,
+                            "claimed": False
+                        }).execute()
+
+                    st.success("Sale posted successfully!")
+                    st.image(image_url, caption="Your grid")
+                except Exception as e:
+                    st.error(f"Error creating sale: {str(e)}")
+
+# ────────────────────────────────────────────────
+# Browse Sales (simple version - we'll improve later)
+# ────────────────────────────────────────────────
+elif page == "Browse Sales":
+    st.header("Browse Open Sales")
+
+    try:
+        posts = conn.table("posts").select("*").execute().data or []
+        if not posts:
+            st.info("No sales yet. Be the first to create one!")
+        for post in posts:
+            st.subheader(post["title"])
+            st.image(post["image_url"], use_column_width=True)
+
+            grid_size = post["grid_size"]
+            cols_per_row = min(3, grid_size)
+            rows = (grid_size + cols_per_row - 1) // cols_per_row
+
+            for r in range(rows):
+                cols = st.columns(cols_per_row)
+                for c in range(cols_per_row):
+                    seg_num = r * cols_per_row + c + 1
+                    if seg_num > grid_size:
+                        break
+                    with cols[c]:
+                        seg = conn.table("segments").select("*").eq("post_id", post["id"]).eq("segment_number", seg_num).single().execute().data
+                        if seg["claimed"]:
+                            st.button(f"#{seg_num} Claimed", disabled=True)
+                        else:
+                            if st.button(f"Claim #{seg_num} - ${post['price_per_card']}"):
+                                st.info("Claim logic coming soon")
+                            if st.button(f"Offer on #{seg_num}"):
+                                st.info("Offer logic coming soon")
+    except Exception as e:
+        st.error(f"Error loading sales: {str(e)}")
