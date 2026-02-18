@@ -35,23 +35,26 @@ elif page == "Login / Sign Up":
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
     with tab1:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pw")
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Password", type="password", key="login_pw")
         if st.button("Login"):
             if not email or not password:
-                st.warning("Enter email and password.")
+                st.warning("Please enter email and password.")
             else:
                 with st.spinner("Logging in..."):
                     try:
                         response = conn.auth.sign_in_with_password({"email": email, "password": password})
                         if response.user:
                             st.session_state.user = response.user
-                            st.success("Logged in!")
+                            st.success("Logged in successfully!")
+                            # Force refresh with delay to let session state settle
+                            import time
+                            time.sleep(1)  # 1 second delay
                             st.rerun()
-                        else:
-                            st.error("Login failed.")
-                    except Exception as e:
-                        st.error(f"Login error: {str(e)}")
+                    else:
+                        st.error("Login failed – check credentials.")
+                except Exception as e:
+                    st.error(f"Login error: {str(e)}")
 
     with tab2:
         email = st.text_input("Email", key="signup_email")
@@ -68,21 +71,28 @@ elif page == "Create a Sale":
     if "user" not in st.session_state:
         st.warning("Please log in first")
     else:
-        st.header("Create Sale")
+        st.header("Create a New Claim Sale")
 
-        title = st.text_input("Title")
-        grid_size = st.selectbox("Cards", [1, 2, 3, 4, 6, 9])
+        title = st.text_input("Title (e.g. 2024 Topps Chrome Set)")
+        grid_size = st.selectbox("Number of cards", [1, 2, 3, 4, 6, 9])
         hours = st.selectbox("Claim window (hours)", [24, 48, 72])
-        price = st.number_input("Price per card ($)", min_value=0.01, step=0.01)
+        price_per_card = st.number_input("Price per card ($)", min_value=0.01, step=0.01)
 
-        image = st.file_uploader("Upload grid image", type=["jpg", "png", "jpeg"])
+        image = st.file_uploader(f"Upload your {grid_size}-card grid image", type=["jpg", "png", "jpeg"])
 
         if st.button("Post Sale") and image and title:
-            with st.spinner("Posting..."):
+            with st.spinner("Uploading image and creating sale..."):
                 try:
+                    # Convert memoryview to bytes
+                    image_bytes = image.getbuffer().tobytes()
+
                     user_id = st.session_state.user.id
                     image_path = f"grids/{user_id}/{image.name}"
-                    conn.client.storage.from_("claimcards").upload(image_path, image.getbuffer(), {"content-type": image.type})
+                    conn.client.storage.from_("claimcards").upload(
+                        image_path,
+                        image_bytes,
+                        {"content-type": image.type}
+                    )
                     image_url = conn.client.storage.from_("claimcards").get_public_url(image_path)
 
                     expiration = (datetime.now() + timedelta(hours=hours)).isoformat()
@@ -93,7 +103,7 @@ elif page == "Create a Sale":
                         "claim_window_hours": hours,
                         "expiration": expiration,
                         "grid_size": grid_size,
-                        "price_per_card": price
+                        "price_per_card": price_per_card
                     }).execute()
 
                     post_id = post.data[0]["id"]
@@ -105,11 +115,11 @@ elif page == "Create a Sale":
                             "claimed": False
                         }).execute()
 
-                    st.success("Sale posted!")
-                    st.image(image_url)
+                    st.success("Sale posted successfully!")
+                    st.image(image_url, caption="Your grid")
 
                 except Exception as e:
-                    st.error(f"Error: {str(e)}")
+                    st.error(f"Error creating sale: {str(e)}")
 
 # Browse Sales
 elif page == "Browse Sales":
