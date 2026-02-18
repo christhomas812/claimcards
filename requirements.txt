@@ -1,0 +1,7 @@
+streamlit
+st-supabase-connection
+supabase
+pillow
+python-dotenv
+requests
+stripe
