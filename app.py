@@ -40,25 +40,32 @@ elif page == "Login / Sign Up":
     st.header("Login / Sign Up")
     tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
-    with tab1:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_pw")
-        if st.button("Login"):
-            if not email or not password:
-                st.warning("Please enter both email and password.")
-            else:
-                with st.spinner("Logging in..."):
-                    try:
-                        response = conn.auth.sign_in_with_password({"email": email, "password": password})
-                        if response.user:
-                            st.session_state.user = response.user
-                            st.success("Logged in successfully! Redirecting...")
-                            st.rerun()
-                        else:
-                            st.error("Login failed – check your email and password.")
-                    except Exception as e:
-                        st.error(f"Login error: {str(e)}")
-                        st.info("Tip: Make sure your account is confirmed (check email/spam).")
+  with tab1:
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Password", type="password", key="login_pw")
+    
+    if st.button("Login"):
+        if not email or not password:
+            st.warning("Please enter both email and password.")
+        else:
+            with st.spinner("Logging in..."):
+                try:
+                    response = conn.auth.sign_in_with_password({"email": email, "password": password})
+                    
+                    if response.user:
+                        st.session_state.user = response.user
+                        st.success("Logged in successfully!")
+                        
+                        # Force page refresh after a tiny delay (fixes rerun timing issue)
+                        import time
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Login failed – check your email and password.")
+                
+                except Exception as e:
+                    st.error(f"Login error: {str(e)}")
+                    st.info("Tip: Make sure your account is confirmed (check email/spam).")
 
     with tab2:
         email = st.text_input("Email", key="signup_email")
@@ -89,11 +96,11 @@ elif page == "Create a Sale":
         if st.button("Post Sale") and image and title:
             with st.spinner("Uploading image and creating sale..."):
                 try:
-                    # Upload image
+                    # Upload image using conn.client.storage
                     user_id = st.session_state.user.id
                     image_path = f"grids/{user_id}/{image.name}"
-                    conn.storage.from_("claimcards").upload(image_path, image.getbuffer(), {"content-type": image.type})
-                    image_url = conn.storage.from_("claimcards").get_public_url(image_path)
+                    conn.client.storage.from_("claimcards").upload(image_path, image.getbuffer(), {"content-type": image.type})
+                    image_url = conn.client.storage.from_("claimcards").get_public_url(image_path)
 
                     # Create post
                     expiration = (datetime.now() + timedelta(hours=hours)).isoformat()
@@ -121,7 +128,6 @@ elif page == "Create a Sale":
                     st.image(image_url, caption="Your grid")
                 except Exception as e:
                     st.error(f"Error creating sale: {str(e)}")
-
 # ────────────────────────────────────────────────
 # Browse Sales (simple version - we'll improve later)
 # ────────────────────────────────────────────────
@@ -135,7 +141,25 @@ elif page == "Browse Sales":
         for post in posts:
             st.subheader(post["title"])
             st.image(post["image_url"], use_column_width=True)
+elif page == "Create a Sale":
+    if "user" not in st.session_state:
+        st.warning("Please log in first")
+    else:
+        st.header("Create a New Claim Sale")
 
+        title = st.text_input("Title (e.g. 2024 Topps Chrome Set)")
+        grid_size = st.selectbox("Number of cards", [1, 2, 3, 4, 6, 9])
+        hours = st.selectbox("Claim window (hours)", [24, 48, 72])
+        price_per_card = st.number_input("Price per card ($)", min_value=0.01, step=0.01)
+
+        image = st.file_uploader(f"Upload your {grid_size}-card grid image", type=["jpg", "png", "jpeg"])
+
+        if st.button("Post Sale") and image and title:
+            with st.spinner("Uploading image and creating sale..."):
+                try:
+                    # Upload image
+                    user_id = st.session_state.user.id
+                    image_path = f"gr
             grid_size = post["grid_size"]
             cols_per_row = min(3, grid_size)
             rows = (grid_size + cols_per_row - 1) // cols_per_row
