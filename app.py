@@ -24,6 +24,9 @@ st.set_page_config(page_title="ClaimCards", layout="wide")
 # Sidebar
 page = st.sidebar.selectbox("Go to", ["Home", "Login / Sign Up", "Create a Sale", "Browse Sales"])
 
+st.sidebar.write("Current user ID:", st.session_state.user.id if "user" in st.session_state else "Not logged in")
+st.sidebar.write("Authenticated status:", conn.auth.get_user() is not None)
+
 # Home
 if page == "Home":
     st.title("Welcome to ClaimCards")
